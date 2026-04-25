@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Árvore de Ramificações — Naming</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e8e8e8;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 20px;
+    background: #161820;
+    border-bottom: 1px solid #2a2d3a;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 15px; font-weight: 600; color: #f0f0f0; letter-spacing: 0.02em; }
+  header span { font-size: 12px; color: #555; }
+
+  .workspace { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar {
+    width: 290px; flex-shrink: 0;
+    background: #161820;
+    border-right: 1px solid #2a2d3a;
+    display: flex; flex-direction: column;
+    padding: 16px; gap: 12px;
+  }
+  .sidebar label {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em; color: #666;
+  }
+
+  textarea {
+    flex: 1;
+    background: #0f1117;
+    border: 1px solid #2a2d3a;
+    border-radius: 8px;
+    color: #d8d8d8;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px; line-height: 1.75;
+    padding: 12px; resize: none; outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: #6ab4f5; }
+
+  .legend { display: flex; flex-direction: column; gap: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #888; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  .btn-group { display: flex; gap: 8px; }
+  button {
+    flex: 1; padding: 9px 10px; border-radius: 8px; border: none;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; letter-spacing: 0.02em;
+  }
+  .btn-regen { background: #378ADD; color: #fff; }
+  .btn-regen:hover { background: #4a96e8; }
+  .btn-regen:active { transform: scale(0.97); }
+  .btn-export { background: #185FA5; color: #e8f2fc; }
+  .btn-export:hover { background: #1e72c2; }
+  .btn-export:active { transform: scale(0.97); }
+
+  .canvas-area {
+    flex: 1; overflow: hidden; position: relative;
+    background: #080a0e;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #stage-wrapper {
+    position: relative;
+    width: 1920px; height: 1080px;
+    transform-origin: center center;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 1px #2a2d3a, 0 12px 60px rgba(0,0,0,0.7);
+  }
+
+  #main-svg { display: block; background: #0f1117; }
+
+  .loading-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #4a90d9;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s;
+  }
+  .loading-overlay.visible { opacity: 1; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:0.3} 50%{opacity:0.9} }
+
+  .dim-badge {
+    position: absolute; bottom: 10px; right: 14px;
+    font-size: 10px; color: #2a2d3a; pointer-events: none;
+    font-family: monospace; letter-spacing: 0.05em;
+  }
+
+  .hint-text {
+    font-size: 11px; color: #444; line-height: 1.6;
+    border-top: 1px solid #2a2d3a; padding-top: 10px;
+  }
+  .hint-text code {
+    background: #1e2128; padding: 1px 5px; border-radius: 3px;
+    font-size: 11px; color: #6ab4f5; letter-spacing: 0.01em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌿 Árvore de Ramificações</h1>
+  <span>Naming · Canvas 1920 × 1080 px</span>
+</header>
+
+<div class="workspace">
+  <aside class="sidebar">
+    <label>Ramificações</label>
+    <textarea id="input" spellcheck="false">Naming > Comida > Boca > Língua > *Paladar*
+Naming > Comida > Boca > Sabores > *Tempero*
+Naming > Comida > Cheiro > Aroma > *Olfato*
+Naming > Bebida > Sede > Gole > *Sorvo*
+Naming > Bebida > Fermentação > Levedura > *Fermento*
+Naming > Natureza > Raiz > Solo > *Terra*
+Naming > Natureza > Folha > Verde > *Clorofila*
+Naming > Natureza > Água > Rio > *Corrente*
+Naming > Sensação > Calor > Fogo > *Brasa*
+Naming > Sensação > Frescor > Vento > *Brisa*
+Naming > Telhado > Teto > Cobertura > *Cobre*
+Naming > Telhado > Teto > *Rooftop*</textarea>
+
+    <div class="legend">
+      <label>Legenda</label>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#ffffff; border: 1px solid #444;"></div>
+        <span>Nó central (fixo)</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#85B7EB"></div>
+        <span>Palavras de conexão</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:#185FA5"></div>
+        <span>*Candidatos a nome*</span>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button class="btn-regen" onclick="regenerate()">↺ Regenerar</button>
+      <button class="btn-export" id="btn-export" onclick="exportPNG()">↓ Exportar PNG</button>
+    </div>
+
+    <div class="hint-text">
+      Nós compartilhados se unem automaticamente.<br>
+      Use <code>*asteriscos*</code> para candidatos a nome.
+    </div>
+  </aside>
+
+  <div class="canvas-area" id="canvas-area">
+    <div id="stage-wrapper">
+      <svg id="main-svg" width="1920" height="1080"></svg>
+      <div class="loading-overlay" id="loading">Construindo árvore…</div>
+    </div>
+    <div class="dim-badge">1920 × 1080</div>
+  </div>
+</div>
+
+<script>
+const W  = 1920, H  = 1080;
+const CX = W / 2, CY = H / 2;
+
+// ── Palette ────────────────────────────────────────────────────────────────
+const COLOR_ROOT      = '#ffffff';   // white — root node
+const COLOR_NODE      = '#85B7EB';   // light blue — connectors
+const COLOR_CANDIDATE = '#185FA5';   // darker blue — name candidates
+const COLOR_LINK      = '#1e2d3f';   // very dark blue-grey — edges
+const BG              = '#0f1117';
+
+// Font used for all text — must be available in browser at render time
+const FONT = 'system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+
+let simulation = null;
+let simDone    = false;   // true once simulation has cooled
+
+// ── Fit stage to viewport ──────────────────────────────────────────────────
+function fitStage() {
+  const area  = document.getElementById('canvas-area');
+  const wrap  = document.getElementById('stage-wrapper');
+  const scale = Math.min((area.clientWidth - 32) / W, (area.clientHeight - 32) / H);
+  wrap.style.transform = `scale(${scale})`;
+}
+window.addEventListener('resize', fitStage);
+
+// ── Parse input ────────────────────────────────────────────────────────────
+function parseInput(text) {
+  const lines   = text.trim().split('\n').filter(l => l.trim());
+  const nodeMap = new Map();
+  const linkSet = new Set();
+  const links   = [];
+
+  lines.forEach(line => {
+    const parts = line.split('>').map(s => s.trim()).filter(Boolean);
+    parts.forEach((part, i) => {
+      const isCandidate = /^\*.*\*$/.test(part);
+      const key = part.replace(/\*/g, '').trim();
+      if (!nodeMap.has(key)) {
+        nodeMap.set(key, {
+          id: key, label: key, level: i,
+          type: i === 0 ? 'root' : isCandidate ? 'candidate' : 'node'
+        });
+      }
+      if (i > 0) {
+        const src = parts[i - 1].replace(/\*/g, '').trim();
+        const ek  = src + '|||' + key;
+        if (!linkSet.has(ek)) { linkSet.add(ek); links.push({ source: src, target: key }); }
+      }
+    });
+  });
+
+  return { nodes: Array.from(nodeMap.values()), links };
+}
+
+// ── Node styling helpers ───────────────────────────────────────────────────
+function nodeColor(d) {
+  if (d.type === 'root')      return COLOR_ROOT;
+  if (d.type === 'candidate') return COLOR_CANDIDATE;
+  return COLOR_NODE;
+}
+function textColor(d) {
+  if (d.type === 'root')      return '#111111';
+  if (d.type === 'candidate') return '#e8f2fc';
+  return '#0b2a4a';
+}
+function fontSizePx(d) { return d.type === 'root' ? 22 : 15; }
+function fontWeight(d) { return d.type === 'node' ? '500' : '700'; }
+
+// ── Build / rebuild graph ──────────────────────────────────────────────────
+function buildGraph() {
+  simDone = false;
+  if (simulation) { simulation.stop(); simulation = null; }
+
+  const svgEl = document.getElementById('main-svg');
+  while (svgEl.firstChild) svgEl.removeChild(svgEl.firstChild);
+
+  const { nodes, links } = parseInput(document.getElementById('input').value);
+
+  // Pin root to centre
+  const rootNode = nodes.find(n => n.type === 'root');
+  if (rootNode) { rootNode.fx = CX; rootNode.fy = CY; rootNode.x = CX; rootNode.y = CY; }
+
+  // Initial ring positions for non-root nodes
+  const others = nodes.filter(n => n.type !== 'root');
+  others.forEach((n, i) => {
+    const a = (i / others.length) * Math.PI * 2;
+    const r = 280 + Math.random() * 220;
+    n.x = CX + Math.cos(a) * r;
+    n.y = CY + Math.sin(a) * r;
+  });
+
+  const svg   = d3.select('#main-svg');
+  const defs  = svg.append('defs');
+
+  // Glow for candidates
+  const filt = defs.append('filter').attr('id', 'glow')
+    .attr('x', '-50%').attr('y', '-50%').attr('width', '200%').attr('height', '200%');
+  filt.append('feGaussianBlur').attr('stdDeviation', '7').attr('result', 'blur');
+  const fm = filt.append('feMerge');
+  fm.append('feMergeNode').attr('in', 'blur');
+  fm.append('feMergeNode').attr('in', 'SourceGraphic');
+
+  const g     = svg.append('g').attr('id', 'root-g');
+  const linkG = g.append('g');
+  const nodeG = g.append('g');
+
+  const margin = 80;
+
+  simulation = d3.forceSimulation(nodes)
+    .force('link',      d3.forceLink(links).id(d => d.id).distance(160).strength(0.48))
+    .force('charge',    d3.forceManyBody().strength(-560).distanceMax(800))
+    .force('collision', d3.forceCollide().radius(d => (d._w || 70) / 2 + 24).strength(1.0))
+    .force('boundX',    d3.forceX(CX).strength(0.016))
+    .force('boundY',    d3.forceY(CY).strength(0.016))
+    .alphaDecay(0.022)
+    .on('end', () => { simDone = true; });
+
+  simulation.on('tick', () => {
+    nodes.forEach(n => {
+      if (n.type === 'root') return;
+      const hw = (n._w || 70) / 2 + margin;
+      const hh = (n._h || 32) / 2 + margin;
+      n.x = Math.max(hw, Math.min(W - hw, n.x));
+      n.y = Math.max(hh, Math.min(H - hh, n.y));
+    });
+    linkSel.attr('d', d => bezier(d.source.x, d.source.y, d.target.x, d.target.y));
+    nodeSel.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  // Links
+  const linkSel = linkG.selectAll('path')
+    .data(links).join('path')
+    .attr('fill', 'none')
+    .attr('stroke', COLOR_LINK)
+    .attr('stroke-width', 1.8)
+    .attr('stroke-linecap', 'round')
+    .attr('opacity', 0.9);
+
+  // Nodes
+  const nodeSel = nodeG.selectAll('g')
+    .data(nodes).join('g')
+    .style('cursor', d => d.type === 'root' ? 'default' : 'grab')
+    .call(d3.drag()
+      .on('start', (ev, d) => {
+        if (d.type === 'root') return;
+        if (!ev.active) simulation.alphaTarget(0.25).restart();
+        d.fx = d.x; d.fy = d.y;
+      })
+      .on('drag', (ev, d) => {
+        if (d.type === 'root') return;
+        d.fx = Math.max(margin, Math.min(W - margin, ev.x));
+        d.fy = Math.max(margin, Math.min(H - margin, ev.y));
+      })
+      .on('end', (ev, d) => {
+        if (d.type === 'root') return;
+        if (!ev.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      })
+    );
+
+  nodeSel.append('rect')
+    .attr('rx', 24).attr('ry', 24)
+    .attr('fill',   d => nodeColor(d))
+    .attr('filter', d => d.type === 'candidate' ? 'url(#glow)' : null);
+
+  nodeSel.append('text')
+    .text(d => d.label)
+    .attr('text-anchor', 'middle')
+    .attr('dominant-baseline', 'central')
+    .attr('font-family', FONT)
+    .attr('font-size',   d => fontSizePx(d) + 'px')
+    .attr('font-weight', d => fontWeight(d))
+    .attr('fill',        d => textColor(d))
+    .attr('pointer-events', 'none');
+
+  // Measure capsules
+  nodeSel.each(function(d) {
+    const b  = d3.select(this).select('text').node().getBBox();
+    const px = d.type === 'root' ? 32 : 24;
+    const py = d.type === 'root' ? 16 : 13;
+    d._w = b.width  + px * 2;
+    d._h = b.height + py * 2;
+    d3.select(this).select('rect')
+      .attr('width',  d._w).attr('height', d._h)
+      .attr('x', -d._w / 2).attr('y', -d._h / 2);
+  });
+
+  // Re-apply collision with real sizes
+  simulation.force('collision',
+    d3.forceCollide().radius(d => (d._w || 70) / 2 + 24).strength(1.0));
+  simulation.alpha(0.85).restart();
+
+  // Hover
+  nodeSel
+    .on('mouseenter', function(ev, d) {
+      if (d.type === 'root') return;
+      d3.select(this).select('rect').attr('opacity', 0.75);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).select('rect').attr('opacity', 1);
+    });
+
+  document.getElementById('loading').classList.remove('visible');
+}
+
+function bezier(sx, sy, tx, ty) {
+  const mx  = (sx + tx) / 2, my = (sy + ty) / 2;
+  const dx  = tx - sx,       dy = ty - sy;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const off = Math.min(len * 0.22, 90);
+  const nx  = -dy / len * off, ny = dx / len * off;
+  return `M${sx},${sy} C${mx+nx},${my+ny} ${mx+nx},${my+ny} ${tx},${ty}`;
+}
+
+function regenerate() {
+  document.getElementById('loading').classList.add('visible');
+  setTimeout(buildGraph, 40);
+}
+
+let debounceTimer;
+document.getElementById('input').addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(buildGraph, 650);
+});
+
+// ── Export PNG — robust approach ───────────────────────────────────────────
+// Strategy: pause the simulation, render every node manually onto a canvas
+// using Canvas 2D API (no SVG serialisation issues with fonts/filters).
+// This guarantees pixel-perfect output at exactly 1920×1080.
+function exportPNG() {
+  const btn  = document.getElementById('btn-export');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Aguardando…';
+  btn.disabled = true;
+
+  // Wait for sim to cool if still running, then render
+  function doRender() {
+    btn.textContent = '⏳ Renderizando…';
+
+    // Grab current node/link data from the live SVG
+    const svgEl  = document.getElementById('main-svg');
+    const rootG  = svgEl.querySelector('#root-g');
+
+    // Collect nodes and links from D3's current simulation state
+    // by reading the SVG directly — avoids closure scope issues on rebuild
+    const canvas = document.createElement('canvas');
+    canvas.width  = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, W, H);
+
+    // Use the live SVG: serialize it but with explicit font stack embedded
+    // so the browser can rasterize it correctly via an Image.
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('width',  W);
+    clone.setAttribute('height', H);
+    clone.setAttribute('xmlns',  'http://www.w3.org/2000/svg');
+
+    // Replace font-family in all text elements with a cross-platform safe stack
+    clone.querySelectorAll('text').forEach(t => {
+      t.setAttribute('font-family', 'Arial, Helvetica, sans-serif');
+    });
+
+    // Inject a style block that forces background colour (SVG style attr stripped on some renderers)
+    const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    styleEl.textContent = `svg { background: ${BG}; }`;
+    clone.insertBefore(styleEl, clone.firstChild);
+
+    const svgStr  = new XMLSerializer().serializeToString(clone);
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const svgUrl  = URL.createObjectURL(svgBlob);
+
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, W, H);
+      URL.revokeObjectURL(svgUrl);
+
+      canvas.toBlob(blob => {
+        if (!blob) {
+          // Fallback: try canvas2D direct draw
+          directCanvasRender(canvas, ctx);
+          return;
+        }
+        const a = document.createElement('a');
+        a.href     = URL.createObjectURL(blob);
+        a.download = 'arvore-naming-1920x1080.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        btn.textContent = orig;
+        btn.disabled = false;
+      }, 'image/png', 1.0);
+    };
+
+    img.onerror = () => {
+      // SVG→Image failed (security/CORS), fall back to direct canvas draw
+      URL.revokeObjectURL(svgUrl);
+      directCanvasRender(canvas, ctx);
+    };
+
+    // Use a data URL instead of object URL — avoids taint on some browsers
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.readAsDataURL(svgBlob);
+  }
+
+  // If simulation still running, wait for it to end (max 3s), then render
+  if (simDone || !simulation) {
+    doRender();
+  } else {
+    let waited = 0;
+    const check = setInterval(() => {
+      waited += 100;
+      if (simDone || waited >= 3000) {
+        clearInterval(check);
+        if (simulation) simulation.stop();
+        doRender();
+      }
+    }, 100);
+  }
+}
+
+// ── Fallback: draw everything with Canvas 2D API directly ─────────────────
+// Reads positions from D3 simulation data stored on DOM elements via __data__
+function directCanvasRender(canvas, ctx) {
+  const btn  = document.getElementById('btn-export');
+  const orig = '↓ Exportar PNG';
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, W, H);
+
+  // Collect all link paths from the SVG
+  document.querySelectorAll('#main-svg #root-g g:first-child path').forEach(p => {
+    const d = p.getAttribute('d');
+    if (!d) return;
+    ctx.save();
+    ctx.strokeStyle = COLOR_LINK;
+    ctx.lineWidth   = 1.8;
+    ctx.lineCap     = 'round';
+    ctx.globalAlpha = 0.9;
+    const path2d = new Path2D(d);
+    ctx.stroke(path2d);
+    ctx.restore();
+  });
+
+  // Collect all node groups
+  document.querySelectorAll('#main-svg #root-g g:last-child > g').forEach(g => {
+    const datum = g.__data__;
+    if (!datum) return;
+    const x = datum.x, y = datum.y;
+    const rw = datum._w || 80, rh = datum._h || 36;
+    const rx = 24;
+
+    // Capsule
+    ctx.save();
+    ctx.fillStyle = nodeColor(datum);
+    if (datum.type === 'candidate') {
+      ctx.shadowColor = '#185FA5';
+      ctx.shadowBlur  = 18;
+    }
+    roundRect(ctx, x - rw/2, y - rh/2, rw, rh, rx);
+    ctx.fill();
+    ctx.restore();
+
+    // Text
+    ctx.save();
+    ctx.fillStyle  = textColor(datum);
+    ctx.font       = `${fontWeight(datum)} ${fontSizePx(datum)}px Arial, Helvetica, sans-serif`;
+    ctx.textAlign  = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(datum.label, x, y);
+    ctx.restore();
+  });
+
+  canvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'arvore-naming-1920x1080.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    btn.textContent = orig;
+    btn.disabled = false;
+  }, 'image/png', 1.0);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  fitStage();
+  document.getElementById('loading').classList.add('visible');
+  setTimeout(buildGraph, 80);
+});
+</script>
+</body>
+</html>
